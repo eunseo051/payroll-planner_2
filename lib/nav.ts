@@ -5,8 +5,7 @@ import {
   SlidersHorizontal,
   Calculator,
   TrendingUp,
-  ShieldCheck,
-  CalendarClock,
+  CalendarDays,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -23,6 +22,5 @@ export const NAV: NavItem[] = [
   { label: '인상률·배분 설정', href: '/rates', icon: SlidersHorizontal },
   { label: '급여 시뮬레이션', href: '/simulation', icon: Calculator },
   { label: '승진 추정', href: '/promotion', icon: TrendingUp },
-  { label: '데이터 품질 센터', href: '/data-quality', icon: ShieldCheck },
-  { label: '휴가·유연근무', href: '/workforce', icon: CalendarClock },
+  { label: '근무·휴가 운영', href: '/workforce', icon: CalendarDays },
 ]

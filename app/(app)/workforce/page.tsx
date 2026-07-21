@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   CalendarDays,
@@ -84,10 +84,6 @@ function addDays(d: Date, n: number): Date {
   const r = new Date(d)
   r.setDate(r.getDate() + n)
   return r
-}
-
-function dateInRange(date: string, start: string, end: string): boolean {
-  return date >= start && date <= end
 }
 
 // ── 배지 스타일 ──────────────────────────────────────────────────────
@@ -211,7 +207,7 @@ function useFilters(employees: Employee[]) {
 
 // ── 휴가 현황 탭 ──────────────────────────────────────────────────────
 function LeaveTab({ employees }: { employees: Employee[] }) {
-  const { leaveBalances, leaveRecords, upsertLeaveBalance, addLeaveRecord, updateLeaveRecord, removeLeaveRecord, resetWorkforce, generateDemoData } =
+  const { leaveBalances, leaveRecords, upsertLeaveBalance, addLeaveRecord, updateLeaveRecord, removeLeaveRecord } =
     useWorkforce()
   const { departments, year, setYear, dept, setDept, nameQuery, setNameQuery, filtered } =
     useFilters(employees)
@@ -272,9 +268,6 @@ function LeaveTab({ employees }: { employees: Employee[] }) {
       }))
       .sort((a, b) => b.record.startDate.localeCompare(a.record.startDate))
   }, [leaveRecords, filtered, employees])
-
-  const empName = (id: number) => employees.find((e) => e.id === id)?.name ?? `#${id}`
-  const empDept = (id: number) => employees.find((e) => e.id === id)?.dept ?? '-'
 
   return (
     <div className="flex flex-col gap-6">
@@ -482,9 +475,9 @@ function LeaveTab({ employees }: { employees: Employee[] }) {
         open={balanceOpen}
         onOpenChange={setBalanceOpen}
         employees={employees}
-        currentDept={dept}
         year={year}
         onSave={upsertLeaveBalance}
+        existingBalances={leaveBalances}
       />
 
       {/* 휴가 기록 다이얼로그 */}
@@ -555,102 +548,275 @@ function SummaryCard({
 }
 
 // ── 연차 부여 설정 다이얼로그 ──────────────────────────────────────────
+type LeaveBalanceTargetMode = 'employee' | 'department' | 'all'
+
 function BalanceDialog({
   open,
   onOpenChange,
   employees,
-  currentDept,
   year,
   onSave,
+  existingBalances,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   employees: Employee[]
-  currentDept: string
   year: number
   onSave: (row: { employeeId: number; year: number; grantedDays: number }) => void
+  existingBalances: { employeeId: number; year: number }[]
 }) {
+  const [mode, setMode] = useState<LeaveBalanceTargetMode>('employee')
   const [employeeId, setEmployeeId] = useState<string>('')
+  const [department, setDepartment] = useState<string>('all')
   const [grantedDays, setGrantedDays] = useState<string>('')
-  const [applyToDept, setApplyToDept] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
-  function handleSave() {
-    const days = parseFloat(grantedDays)
-    if (isNaN(days) || days < 0) return
-    const eid = parseInt(employeeId)
-    if (isNaN(eid)) return
+  const departments = useMemo(
+    () => Array.from(new Set(employees.map((e) => e.dept).filter(Boolean))).sort(),
+    [employees],
+  )
 
-    if (applyToDept) {
-      const emp = employees.find((e) => e.id === eid)
-      const targets = emp ? employees.filter((e) => e.dept === emp.dept) : []
-      targets.forEach((e) => onSave({ employeeId: e.id, year, grantedDays: days }))
-    } else {
-      onSave({ employeeId: eid, year, grantedDays: days })
+  // 대상 직원 목록 도출
+  const affectedEmployees = useMemo(() => {
+    if (mode === 'employee') {
+      const eid = parseInt(employeeId)
+      return Number.isNaN(eid) ? [] : employees.filter((e) => e.id === eid)
     }
-    setGrantedDays('')
-    setEmployeeId('')
-    setApplyToDept(false)
+    if (mode === 'department') {
+      return department === 'all' ? [] : employees.filter((e) => e.dept === department)
+    }
+    return employees
+  }, [mode, employeeId, department, employees])
+
+  // 부여일수 유효성 검사 — 빈 문자열을 Number()로 0으로 만들지 않도록 원본 문자열 먼저 검증
+  const grantedDaysError = useMemo(() => {
+    const raw = grantedDays.trim()
+    if (raw === '') return '부여일수를 입력해주세요.'
+    if (!/^-?\d+(\.\d+)?$/.test(raw)) return '숫자로 입력해주세요.'
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return '올바른 숫자가 아니에요.'
+    if (n < 0) return '0 이상의 값을 입력해주세요.'
+    return null
+  }, [grantedDays])
+
+  const yearValid = Number.isInteger(year) && year > 0
+  const hasValidTarget = affectedEmployees.length > 0
+  const canSave =
+    yearValid &&
+    grantedDaysError === null &&
+    hasValidTarget &&
+    !(mode === 'employee' && !employeeId) &&
+    !(mode === 'department' && department === 'all')
+
+  // 기존/신규 건수 계산
+  const bulkStats = useMemo(() => {
+    const existingSet = new Set(
+      existingBalances
+        .filter((b) => b.year === year)
+        .map((b) => b.employeeId),
+    )
+    let updateCount = 0
+    let newCount = 0
+    affectedEmployees.forEach((e) => {
+      if (existingSet.has(e.id)) updateCount++
+      else newCount++
+    })
+    return { updateCount, newCount }
+  }, [affectedEmployees, existingBalances, year])
+
+  // 다이얼로그 닫힐 때 상태 초기화
+  useEffect(() => {
+    if (!open) {
+      setMode('employee')
+      setEmployeeId('')
+      setDepartment('all')
+      setGrantedDays('')
+      setConfirmOpen(false)
+    }
+  }, [open])
+
+  // 모드 전환 시 더 이상 관련 없는 선택 항목만 초기화 (연도·부여일수는 유지)
+  function handleModeChange(next: LeaveBalanceTargetMode) {
+    setMode(next)
+    if (next !== 'employee') setEmployeeId('')
+    if (next !== 'department') setDepartment('all')
+  }
+
+  function performSave() {
+    if (grantedDaysError !== null) return
+    const days = Number(grantedDays.trim())
+    affectedEmployees.forEach((e) =>
+      onSave({ employeeId: e.id, year, grantedDays: days }),
+    )
     onOpenChange(false)
   }
 
+  function handleSaveClick() {
+    if (mode === 'employee') {
+      performSave()
+      return
+    }
+    setConfirmOpen(true)
+  }
+
+  const affectedLabel =
+    mode === 'employee'
+      ? affectedEmployees[0]?.name
+        ? `${affectedEmployees[0].name} 직원 1명에게 적용됩니다.`
+        : ''
+      : mode === 'department'
+        ? `${department} 직원 ${affectedEmployees.length}명에게 적용됩니다.`
+        : `전체 직원 ${affectedEmployees.length}명에게 적용됩니다.`
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>연차 부여 설정</DialogTitle>
-          <DialogDescription>
-            기준연도와 직원을 선택하고 부여일수를 입력해주세요. 같은 부서 전체에 일괄 적용할 수 있어요.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>기준연도</Label>
-            <Input value={year} readOnly className="bg-muted/40" />
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>연차 부여 설정</DialogTitle>
+            <DialogDescription>
+              부여 대상을 선택하고 기준연도와 부여일수를 입력해주세요.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            {/* 부여 대상 선택 */}
+            <div className="flex flex-col gap-1.5">
+              <Label>부여 대상</Label>
+              <Tabs
+                value={mode}
+                onValueChange={(v) => handleModeChange(v as LeaveBalanceTargetMode)}
+              >
+                <TabsList className="w-full">
+                  <TabsTrigger value="employee" className="flex-1">직원 1명</TabsTrigger>
+                  <TabsTrigger value="department" className="flex-1">선택 부서 전체</TabsTrigger>
+                  <TabsTrigger value="all" className="flex-1">전 직원</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>기준연도</Label>
+              <Input value={year} readOnly className="bg-muted/40" />
+            </div>
+
+            {mode === 'employee' && (
+              <div className="flex flex-col gap-1.5">
+                <Label>직원</Label>
+                <Select value={employeeId} onValueChange={(v) => v && setEmployeeId(v as string)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="직원 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((e) => (
+                      <SelectItem key={e.id} value={String(e.id)}>
+                        {e.name} · {e.dept}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {mode === 'department' && (
+              <div className="flex flex-col gap-1.5">
+                <Label>부서</Label>
+                <Select value={department} onValueChange={(v) => setDepartment((v as string) ?? 'all')}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="부서 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label>부여일수</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.5"
+                value={grantedDays}
+                onChange={(e) => setGrantedDays(e.target.value)}
+                placeholder="부여일수 입력 (0 이상)"
+              />
+              {grantedDaysError && (
+                <p className="text-xs text-destructive">{grantedDaysError}</p>
+              )}
+            </div>
+
+            {hasValidTarget && affectedLabel && (
+              <p className="text-sm text-muted-foreground">{affectedLabel}</p>
+            )}
+            {mode === 'department' && department !== 'all' && affectedEmployees.length === 0 && (
+              <p className="text-xs text-destructive">해당 부서에 직원이 없어요.</p>
+            )}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>직원</Label>
-            <Select value={employeeId} onValueChange={(v) => v && setEmployeeId(v as string)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="직원 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>
-                    {e.name} · {e.dept}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+            <Button onClick={handleSaveClick} disabled={!canSave}>
+              {mode === 'employee' ? '저장' : '다음'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 일괄 적용 확인 다이얼로그 */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>연차 부여 일괄 적용</DialogTitle>
+            <DialogDescription>
+              {year}년도 연차 {Number(grantedDays.trim())}일을{' '}
+              {mode === 'department'
+                ? `${department} 직원 ${affectedEmployees.length}명`
+                : `전체 직원 ${affectedEmployees.length}명`}
+              에게 적용합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">기준연도</span>
+              <span>{year}년</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">부여일수</span>
+              <span>{Number(grantedDays.trim())}일</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">적용 대상</span>
+              <span>
+                {mode === 'department' ? `${department} 직원` : '전체 직원'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">대상 직원 수</span>
+              <span>{affectedEmployees.length}명</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">기존 설정 업데이트</span>
+              <span>{bulkStats.updateCount}건</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">신규 설정 생성</span>
+              <span>{bulkStats.newCount}건</span>
+            </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>부여일수</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.5"
-              value={grantedDays}
-              onChange={(e) => setGrantedDays(e.target.value)}
-              placeholder="부여일수 입력"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={applyToDept}
-              onChange={(e) => setApplyToDept(e.target.checked)}
-              className="size-4"
-            />
-            같은 부서 전체에 동일하게 적용
-          </label>
-        </div>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
-          <Button onClick={handleSave} disabled={!employeeId || grantedDays === ''}>
-            저장
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <p className="text-sm text-muted-foreground">
+            기존 설정 {bulkStats.updateCount}건은 업데이트되고, 신규 설정 {bulkStats.newCount}건이 생성됩니다.
+          </p>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+            <Button onClick={performSave}>적용</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -679,7 +845,7 @@ function RecordDialog({
   const [note, setNote] = useState('')
 
   // editing이 바뀌면 폼 초기화
-  useMemo(() => {
+  useEffect(() => {
     if (editing) {
       setEmployeeId(String(editing.employeeId))
       setType(editing.type)
@@ -700,7 +866,7 @@ function RecordDialog({
   }, [editing, open])
 
   // 반차 선택 시 days 자동 0.5
-  useMemo(() => {
+  useEffect(() => {
     if (type === 'AM Half-day' || type === 'PM Half-day') {
       setDays('0.5')
     }
@@ -1075,7 +1241,7 @@ function ScheduleDialog({
   const [endTime, setEndTime] = useState('')
   const [note, setNote] = useState('')
 
-  useMemo(() => {
+  useEffect(() => {
     if (editing) {
       setEmployeeId(String(editing.employeeId))
       setDate(editing.date)

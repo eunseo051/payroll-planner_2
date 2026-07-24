@@ -521,6 +521,16 @@ eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpac
 
 /***/ }),
 
+/***/ "(ssr)/./node_modules/@base-ui/react/use-render/useRender.mjs":
+/*!**************************************************************!*\
+  !*** ./node_modules/@base-ui/react/use-render/useRender.mjs ***!
+  \**************************************************************/
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
+
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   useRender: () => (/* binding */ useRender)\n/* harmony export */ });\n/* harmony import */ var _internals_useRenderElement_mjs__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../internals/useRenderElement.mjs */ \"(ssr)/./node_modules/@base-ui/react/internals/useRenderElement.mjs\");\n\n/**\n * Renders a Base UI element.\n *\n * @public\n */\nfunction useRender(params) {\n  return (0,_internals_useRenderElement_mjs__WEBPACK_IMPORTED_MODULE_0__.useRenderElement)(params.defaultTagName ?? 'div', params, params);\n}//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiKHNzcikvLi9ub2RlX21vZHVsZXMvQGJhc2UtdWkvcmVhY3QvdXNlLXJlbmRlci91c2VSZW5kZXIubWpzIiwibWFwcGluZ3MiOiI7Ozs7O0FBQXFFO0FBQ3JFO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDTztBQUNQLFNBQVMsaUZBQWdCO0FBQ3pCIiwic291cmNlcyI6WyIvaG9tZS9wcm9qZWN0L25vZGVfbW9kdWxlcy9AYmFzZS11aS9yZWFjdC91c2UtcmVuZGVyL3VzZVJlbmRlci5tanMiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgdXNlUmVuZGVyRWxlbWVudCB9IGZyb20gXCIuLi9pbnRlcm5hbHMvdXNlUmVuZGVyRWxlbWVudC5tanNcIjtcbi8qKlxuICogUmVuZGVycyBhIEJhc2UgVUkgZWxlbWVudC5cbiAqXG4gKiBAcHVibGljXG4gKi9cbmV4cG9ydCBmdW5jdGlvbiB1c2VSZW5kZXIocGFyYW1zKSB7XG4gIHJldHVybiB1c2VSZW5kZXJFbGVtZW50KHBhcmFtcy5kZWZhdWx0VGFnTmFtZSA/PyAnZGl2JywgcGFyYW1zLCBwYXJhbXMpO1xufSJdLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOlswXSwic291cmNlUm9vdCI6IiJ9\n//# sourceURL=webpack-internal:///(ssr)/./node_modules/@base-ui/react/use-render/useRender.mjs\n");
+
+/***/ }),
+
 /***/ "(ssr)/./node_modules/@base-ui/react/utils/FocusGuard.mjs":
 /*!**********************************************************!*\
   !*** ./node_modules/@base-ui/react/utils/FocusGuard.mjs ***!
